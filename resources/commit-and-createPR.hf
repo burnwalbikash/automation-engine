@@ -1,0 +1,31 @@
+[build-1]
+#Initialize the product folder to context
+echo SSDIR-2012.2 = C:\dev\prod4.2\ss > ${resource_path_var}\temp\prod-path.lst
+echo SSDIR-2013.2 = C:\dev\prod4.3\ss >> ${resource_path_var}\temp\prod-path.lst
+echo SSDIR-2014.1 = C:\dev\prod4.4\ss >> ${resource_path_var}\temp\prod-path.lst
+echo SSDIR-develop =  C:\dev\develop\ss >> ${resource_path_var}\temp\prod-path.lst
+
+[initialize-product-path-1]
+File-path -> ${resource_path_var}\temp\prod-path.lst
+
+[create-meta-data-1]
+base-committed-version -> 2013.2
+#base committed version must have the latest update and local changes,
+# commit and creating PR will take care by the tool
+git diff --name-only HEAD > ${resource_path_var}\temp\committed-files.lst
+#	This command will list you the file 
+
+[build-2]
+cd SSDIR-${base-committed-version}
+git checkout ${git-release-branch}
+git reset --hard
+git fetch -v --progress ${stash-ss-base-url} ${git-release-branch}
+git clean -fdx
+git pull -v --progress ${stash-ss-base-url} ${git-release-branch}
+# --We doesn't need to check 'git status' since ERROR LEVEL will validate the same
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config
+nmake -f makefile.nt install
+cd client
+msbuild
+

@@ -1,0 +1,154 @@
+#-------------------------------------------------------------------------------
+#
+# SOURCE FILE: command.hf
+#
+# DESCRIPTION: Command to create the hotfix.
+#
+# NOTE(S): All path must be on forward slash format('\')
+#
+#-------------------------------------------------------------------------------
+
+[build-1]
+rpset ${app-rptab-name}
+
+#Initialize the product folder to context
+echo SSDIR = %SSDIR% > ${resource_path_var}\temp\prod-path.lst
+echo SSTOOLS = %SSTOOLS% >> ${resource_path_var}\temp\prod-path.lst
+
+cd %SSDIR%
+git checkout ${git-release-branch}
+git reset --hard
+git fetch -v --progress ${stash-ss-base-url} ${git-release-branch}
+git clean -fdx
+git pull -v --progress ${stash-ss-base-url} ${git-release-branch}
+# --We doesn't need to check 'git status' since ERROR LEVEL will validate the same
+nmake -f makefile.nt config RELEASE=Y
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config RELEASE=Y
+nmake -f makefile.nt install
+cd client
+msbuild
+
+[initialize-product-path-1]
+File-path -> ${resource_path_var}\temp\prod-path.lst
+
+[increment-tagged-version-1]
+File1 -> ${SSDIR}\config\TaggedVersion
+File2 -> ${SSDIR}\webclient\web\config\TaggedVersion
+#Above files to the new tag name and save. Assign new tag to tagged-version variable to config
+
+[build-2]
+cd %SSDIR%
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config RELEASE=Y
+nmake -f makefile.nt install
+cd client
+msbuild /t:clean
+
+[folder-check-1]
+Folder -> ${SSDIR}\downloads\forms
+FileCount -> 0
+
+[build-3]
+cd %SSDIR%/client
+msbuild /t:install
+
+[get-directory-list-1]
+Folder-path -> ${SSDIR}\downloads\forms
+File-path -> ${resource_path_var}\temp\get-directory-list-1.lst
+
+[build-4]
+cd %SSDIR%\client
+msbuild /t:fix
+msbuild /t:install  
+
+[get-directory-list-2]
+Folder-path -> ${SSDIR}\downloads\forms
+File-path -> ${resource_path_var}\temp\get-directory-list-2.lst
+
+[check-diff-on-files-1]
+File1-path -> ${resource_path_var}\temp\get-directory-list-1.lst
+File2-path -> ${resource_path_var}\temp\get-directory-list-2.lst
+
+[build-5]
+cd %SSDIR%
+git diff --name-only HEAD ${pre-tagged-version} | find ".cs" > ${resource_path_var}\temp\committed-files.lst
+#Above command will return list of files committed after last tag
+git diff --name-only | find /c /v "" > ${resource_path_var}\temp\count-of-files.lst
+#Above command will return the # of files to commit, return default to 0 if there is no change
+
+[perform-check-operation-1]
+File1-path -> ${resource_path_var}\temp\committed-files.lst
+File2-path -> ${resource_path_var}\temp\count-of-files.lst
+#TODO: Filter the .cs files from committed-files.lst and set the values to report output
+#value(count-of-files.lst) = 2 + no. of cs file changes
+
+[build-6]
+git commit -am "SS-0 : Tagging SS for ${tagged-version}" --date='${git-timestamp}' --author=burnwalbikash@gmail.com
+git push --tags ${stash-ss-base-url} ${git-release-branch}:${git-release-branch}
+git tag ${tagged-version} -am "SS-0 : Tagging SS for ${tagged-version}"
+
+git push --tags ${stash-ss-base-url} ${git-release-branch}:${git-release-branch}
+cd %SSDIR%
+git checkout ${tagged-version}
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config RELEASE=Y
+nmake -f makefile.nt install
+cd client
+msbuild /t:clean
+msbuild /t:install
+
+[replace-if-contains-1]
+# Replace cotent in a file
+match-content -> "ABC"
+replace-content -> "XYZ"
+filename -> ${SSTOOLS}\bin\build.pm
+
+[build-7]
+# run the command "perl %SSTOOLS%\bin\hfstart.pl"
+cd ${hot-fix-home-folder}
+perl %SSTOOLS%\bin\hfstart.pl > ${resource_path_var}\temp\hf-start-log.lst
+
+#Fetch the hotfix number starts with HF, assign this to hotfix-number variable
+[fetch-hotfix-number-1]
+File1-path -> ${resource_path_var}\temp\hf-start-log.lst
+
+[build-8]
+cd ${hot-fix-home-folder}\${hotfix-number}
+perl %SSTOOLS%\bin\hfgen.pl -f tags/${default-tag} -t tags/${tagged-version} -b ${git-release-branch} -p ss -g ${stash-ss-base-url}
+
+[replace-if-contains-4]
+input-content -> "${stash-ss-base-url}"
+replace-content -> "ssh://git@stash.innovation.com:7999/inv/ss.git"
+filename -> ${SSTOOLS}\bin\hfgit.pm
+
+#verify README.txt, hfreport.out and STR.txt here. Search with the Jira's to be included
+[check-if-contains-1]
+input-content -> ${jira-to-include}
+folder -> ${hot-fix-home-folder}\${hotfix-number}
+filenames -> README.txt,hfreport.out
+#STR.txt is optional if given jira doesn't have steps to replicate, it wouldn't appear in STR.txt file
+
+[replace-if-contains-5]
+match-content -> "\/\/","\\\\","\\"
+replace-content -> "/"
+input-filename -> ${hot-fix-home-folder}\${hotfix-number}\${hotfix-number}
+
+[replace-if-contains-6]
+match-content -> ${web-installation-pattern}
+replace-content -> file(${resource_path_var}\WebInstallNotes_Corrected.txt)
+input-filename -> ${hot-fix-home-folder}\${hotfix-number}\install_instructions.txt
+
+[build-9]
+copy /b ${hot-fix-home-folder}\${hotfix-number}\install_instructions.txt+${resource_path_var}\reporting_and_ss_Installation_Notes.txt  ${hot-fix-home-folder}\${hotfix-number}\install_instructions.txt
+
+#38) Add below content in HFXXXX file to replace ss-reports.jar
+[replace-if-contains-7]
+match-content -> ${replace-jar-cmd}
+replace-content -> "\n#\n# Install the jar\n#\nREPLACEIFEXISTS ss/lib/ss-reports.jar  %SSTOOLS%/lib\n"
+input-filename -> ${hot-fix-home-folder}\${hotfix-number}\${hotfix-number}
+
+#zip the hotfix folder in same location.
+[zip-funcion-1]
+folder-path -> ${hot-fix-home-folder}\${hotfix-number}
+zip-file-path -> ${hot-fix-home-folder}\${hotfix-number}.zip

@@ -1,0 +1,22 @@
+[build-1]
+rpset ${app-rptab-name}
+
+#Initialize the product folder to context
+echo SSDIR = %SSDIR% > ${resource_path_var}\temp\prod-path.lst
+echo DEVTOOLS = %DEVTOOLS% >> ${resource_path_var}\temp\prod-path.lst
+
+[initialize-product-path-1]
+File-path -> ${resource_path_var}\temp\prod-path.lst
+
+[build-2]
+cd %SSDIR%
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config
+#nmake -f makefile.nt install
+cd client
+msbuild
+
+[perform-check-operation-1]
+File1-path -> ${resource_path_var}\temp\committed-files.lst
+File2-path -> ${resource_path_var}\temp\count-of-files.lst
+#value(count-of-files.lst) = 2 + no. of cs file changes

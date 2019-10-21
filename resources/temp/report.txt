@@ -1,0 +1,11 @@
+Old tagged version: ${pre-tagged-version}
+New Tagged version: ${tagged-version}
+
+#filenames are in comma seperated
+Old ddls: ${old-ddl-filenames}
+
+New ddls: ${new-ddl-filenames}
+
+cs file changed: [${cs-file-changed}]
+
+Hotfix number: ${hotfix-number}

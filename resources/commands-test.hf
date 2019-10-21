@@ -1,0 +1,74 @@
+[build-1]
+rpset ${app-rptab-name}
+
+#Initialize the product folder to context
+echo SSDIR = %SSDIR% > ${resource_path_var}\temp\prod-path.lst
+echo DEVTOOLS = %DEVTOOLS% >> ${resource_path_var}\temp\prod-path.lst
+
+cd %SSDIR%
+git checkout ${git-release-branch}
+git reset --hard
+git fetch -v --progress ${stash-ss-base-url} ${git-release-branch}
+git clean -fdx
+git pull -v --progress ${stash-ss-base-url} ${git-release-branch}
+# --We doesn't need to check 'git status' since ERROR LEVEL will validate the same
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config RELEASE=Y
+nmake -f makefile.nt install
+cd client
+msbuild
+
+[initialize-product-path-1]
+File-path -> ${resource_path_var}\temp\prod-path.lst
+
+[increment-tagged-version-1]
+File1 -> ${SSDIR}\config\TaggedVersion
+File2 -> ${SSDIR}\webclient\web\config\TaggedVersion
+#Above files to the new tag name and save. Assign new tag to tagged-version variable to config
+
+[build-2]
+cd %SSDIR%
+nmake -f makefile.nt clean superclean
+nmake -f makefile.nt config RELEASE=Y
+nmake -f makefile.nt install
+cd client
+msbuild /t:clean
+
+[folder-check-1]
+Folder -> ${SSDIR}\downloads\forms
+FileCount -> 0
+
+[build-3]
+cd %SSDIR%/client
+msbuild /t:install
+
+[get-directory-list-1]
+Folder-path -> ${SSDIR}\downloads\forms
+File-path -> ${resource_path_var}\temp\get-directory-list-1.lst
+
+[build-4]
+cd %SSDIR%\client
+msbuild /t:fix
+msbuild /t:install  
+
+[get-directory-list-2]
+Folder-path -> ${SSDIR}\downloads\forms
+File-path -> ${resource_path_var}\temp\get-directory-list-2.lst
+
+[check-diff-on-files-1]
+File1-path -> ${resource_path_var}\temp\get-directory-list-1.lst
+File2-path -> ${resource_path_var}\temp\get-directory-list-2.lst
+
+[build-5]
+cd %SSDIR%
+git diff --name-only HEAD ${pre-tagged-version} | find ".cs" > ${resource_path_var}\temp\committed-files.lst
+#Above command will return list of files committed after last tag
+git diff --name-only | find /c /v "" > ${resource_path_var}\temp\count-of-files.lst
+#This command may be wrong, please validate once manually
+#Above command will return the # of files to commit, return default to 0 if there is no change
+
+[perform-check-operation-1]
+File1-path -> ${resource_path_var}\temp\committed-files.lst
+File2-path -> ${resource_path_var}\temp\count-of-files.lst
+#TODO: Filter the .cs files from committed-files.lst and set the values to report output
+#value(count-of-files.lst) = 2 + no. of cs file changes
